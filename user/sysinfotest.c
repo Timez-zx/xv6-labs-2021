@@ -98,7 +98,6 @@ void testproc() {
   
   sinfo(&info);
   nproc = info.nproc;
-
   pid = fork();
   if(pid < 0){
     printf("sysinfotest: fork failed\n");
@@ -112,6 +111,7 @@ void testproc() {
     }
     exit(0);
   }
+  // printf("z\n");
   wait(&status);
   sinfo(&info);
   if(info.nproc != nproc) {
@@ -124,7 +124,7 @@ int
 main(int argc, char *argv[])
 {
   printf("sysinfotest: start\n");
-  testcall();
+  // testcall();
   testmem();
   testproc();
   printf("sysinfotest: OK\n");

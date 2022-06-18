@@ -3,6 +3,7 @@
 #include "kernel/types.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
+#include "kernel/stat.h"
 
 // Parsed command representation
 #define EXEC  1
@@ -58,11 +59,14 @@ void
 runcmd(struct cmd *cmd)
 {
   int p[2];
+  char command[128];
   struct backcmd *bcmd;
   struct execcmd *ecmd;
   struct listcmd *lcmd;
   struct pipecmd *pcmd;
   struct redircmd *rcmd;
+  command[0] = '.';
+  command[1] = '/';
 
   if(cmd == 0)
     exit(1);
@@ -75,7 +79,8 @@ runcmd(struct cmd *cmd)
     ecmd = (struct execcmd*)cmd;
     if(ecmd->argv[0] == 0)
       exit(1);
-    exec(ecmd->argv[0], ecmd->argv);
+    memcpy(command+2, ecmd->argv[0], strlen(ecmd->argv[0]));
+    exec(command, ecmd->argv);
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
 
@@ -130,10 +135,13 @@ runcmd(struct cmd *cmd)
   exit(0);
 }
 
+int print_prompt;
+
 int
 getcmd(char *buf, int nbuf)
 {
-  fprintf(2, "$ ");
+  if(print_prompt)
+    fprintf(2, "$ ");
   memset(buf, 0, nbuf);
   gets(buf, nbuf);
   if(buf[0] == 0) // EOF
@@ -146,6 +154,7 @@ main(void)
 {
   static char buf[100];
   int fd;
+  struct cmd* cmd;
 
   // Ensure that three file descriptors are open.
   while((fd = open("console", O_RDWR)) >= 0){
@@ -154,6 +163,19 @@ main(void)
       break;
     }
   }
+
+// 0为当前进程默认的stdin，父进程中的0对应的就是stdin，类型为device，而子进程中0为重定向的文件，因此类型为0
+// 对于每个进程而言，0都是输入的来源，没有重定向的，0为device，对于有重定向的，0为重定向的输入来源。
+// 但是从进程自身的角度看，0就是其输入，1就是输出，如果输出重定向>，1表示的为重定向后的类型。
+
+  struct stat st;
+  if(fstat(0, &st) < 0) 
+    panic("fstat");
+
+  if(st.type == 3)
+    print_prompt = 1;
+  
+  
 
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
@@ -164,8 +186,9 @@ main(void)
         fprintf(2, "cannot cd %s\n", buf+3);
       continue;
     }
+    cmd = parsecmd(buf);
     if(fork1() == 0)
-      runcmd(parsecmd(buf));
+      runcmd(cmd);
     wait(0);
   }
   exit(0);

@@ -288,6 +288,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
+  np->trace = p->trace;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -653,4 +654,14 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+uint64 UnusedProc(void){
+  uint64 unused = NPROC;
+  for(int i = 0; i < NPROC; i++){
+    if(proc[i].state == UNUSED){
+      unused--;
+    }
+  }
+  return unused;
 }

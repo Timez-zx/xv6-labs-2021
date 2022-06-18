@@ -23,6 +23,8 @@ struct {
   struct run *freelist;
 } kmem;
 
+uint64 free=1;
+
 void
 kinit()
 {
@@ -59,6 +61,7 @@ kfree(void *pa)
   acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
+  free++;
   release(&kmem.lock);
 }
 
@@ -74,9 +77,27 @@ kalloc(void)
   r = kmem.freelist;
   if(r)
     kmem.freelist = r->next;
+  free--;
   release(&kmem.lock);
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+// uint64 freemem_info(void){
+//   acquire(&kmem.lock);
+//     uint64 freemem = free*PGSIZE;
+//   release(&kmem.lock);
+//   return freemem;
+// }
+
+uint64 freemem_info(void){
+  uint64 count = 0;
+  struct run *r = kmem.freelist;
+  while(r){
+    count++;
+    r = r->next;
+  }
+  return count * PGSIZE;
 }
