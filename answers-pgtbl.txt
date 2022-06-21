@@ -1,14 +1,4 @@
-zxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslfzxsdfasfsdf. sdfds sddsfsjdsjfn sdfjam
-sdfladfslf
+1. Any kernel data can be accessed faster using this way, just build a page to store the data and map it to physical.
+2. The answer is in exec.c, when execute a program, we alway use exec to make the environment for the program. One function of the exec is to
+make the vm for the program, the page0 is "load the program in"(data and text). The page2 is  the stack, page1 can be assigned by data because
+it is guard page for protestion. The last ones contain the heap and other struct.
