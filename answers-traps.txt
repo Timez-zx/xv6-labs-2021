@@ -1,0 +1,11 @@
+1. the a* regs contain arguments to functions, as the code shown. for "printf", 12 is stored in a1 and 13 is stored in a2.
+2. There is no call for function f(), we can find from the "call.asm" that the address 26 shows the compiler directly compute the
+result of f(8)+1 and store it as an immediate to the reg a1.
+3. It is clear that the printf is locate at the 0x628 address, 0x628 = 1528 + 0x30(ra or pc-4).
+4. The value of ra is 0x38 after the jalr to printf in main.
+5. Output: HE110 World . If bif end, i should be 0x726c6400, 8 bit is a unit for big or small end. The output from the decimal to 16th is 
+not related to the big or small. The mechanism is that the underground transform big or small into integer or 16th. 
+Attention: For "printf", the mechanism for the output of string and others are different. For string, the input should be the address, and 
+read the content from the address then directly transform the each byte to char. But for others, if the input is address, we directly 
+print the address.
+6. The "printf" function will directly read the reg a2 for output, the output of y is the value remained in a2.
