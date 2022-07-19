@@ -125,17 +125,22 @@ panic(char *s)
   for(;;)
     ;
 }
-
+//64位系统，地址也是64位的数据，实际上编译器为了区分地址和普通的64位数据才使用*来区分，带*的类型为地址，可以直接用*来取数据，
+//不带星的是数据，当然，地址数据可以赋值给uint64类型，但是会被计算机认为成普通数据，不能用*来获取地址对应数据，
+//可以将存在uint64的地址数据转换成uint*指针数据，两者实际上都是64bit，只是一个计算机会识别为数据，一个为地址。
 void
 backtrace(void)
 {
+
   uint64 addr = r_fp();
   uint64 down = PGROUNDDOWN(addr);
   uint64 up = PGROUNDUP(addr);
+
   printf("backtrace:\n");
-  printf("%p\n", addr);
-  printf("%p\n", up);
-  printf("%p\n", down);
+  while(addr > down && addr < up){
+    printf("%p\n", *(uint64*) (addr-8));
+    addr = *(uint64*) (addr-16);
+  }
 }
 
 void

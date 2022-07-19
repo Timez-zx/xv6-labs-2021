@@ -95,3 +95,24 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_sigalarm(void)
+{
+  int n;
+  uint64 hander;
+  if(argaddr(1, &hander) < 0)
+    return -1;
+  if(argint(0, &n) < 0)
+    return -1;
+  myproc()->hander = hander;
+  myproc()->interval = n;
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  *(myproc()->trapframe) = myproc()->trapframeT;
+  return 0;
+}

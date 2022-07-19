@@ -59,6 +59,12 @@ usertrap(void)
     // sepc points to the ecall instruction,
     // but we want to return to the next instruction.
     p->trapframe->epc += 4;
+    if(p->Tcount == p->interval-1){
+      p->trapframeT = *(p->trapframe);  //进入用户态由于不进入下一条语句，因此原有的寄存器状态可能会改变，我们需要保存下一条语句的所有寄存器状态
+      p->trapframe->epc = p->hander;    //并在每次handle函数运行结束后，将寄存器状态恢复成下一条语句寄存器状态，这也包括了sepc的寄存器状态，
+      p->Tcount = 0;                    //在保存时，也保存了epc的状态，恢复时，也通过复制trapframe恢复了epc以及其他寄存器，之前的错误是。
+    }                                   //62行和63行反了，因此原有epc状态就成了hander，因此每次恢复回去，epc都是handle，然后运行到sigreturn
+                                        //再次将epc变成hander，最终成了不停进入hander。
 
     // an interrupt will change sstatus &c registers,
     // so don't enable until done with those registers.
@@ -66,6 +72,12 @@ usertrap(void)
 
     syscall();
   } else if((which_dev = devintr()) != 0){
+      if(which_dev == 2){
+        if(p->Tcount < p->interval)
+          p->Tcount++;
+        else
+          p->Tcount = 0;
+      }
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
@@ -114,9 +126,12 @@ usertrapret(void)
   x &= ~SSTATUS_SPP; // clear SPP to 0 for user mode
   x |= SSTATUS_SPIE; // enable interrupts in user mode
   w_sstatus(x);
-
+ 
   // set S Exception Program Counter to the saved user pc.
+
+
   w_sepc(p->trapframe->epc);
+
 
   // tell trampoline.S the user page table to switch to.
   uint64 satp = MAKE_SATP(p->pagetable);
