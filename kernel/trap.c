@@ -16,6 +16,9 @@ void kernelvec();
 
 extern int devintr();
 
+extern int cow_count[];
+
+
 void
 trapinit(void)
 {
@@ -37,6 +40,11 @@ void
 usertrap(void)
 {
   int which_dev = 0;
+  char* mem;
+  pte_t *pte;
+  uint64 P_addr;
+  uint64 pa;
+  uint flags;
 
   if((r_sstatus() & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
@@ -67,6 +75,51 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if(r_scause() == 15){
+    P_addr = r_stval();
+    if(P_addr >= MAXVA){
+      p->killed = 1;
+    }
+    else{
+      pte = walk(p->pagetable, PGROUNDDOWN(P_addr), 0);
+      pa = PTE2PA(*pte);
+      int index = (PHYSTOP - pa)/4096 -1;
+      if(cow_count[index] == 1){
+        *pte = *pte | PTE_W;
+      }
+      else {
+        if((mem = kalloc()) == 0){
+          p->killed = 1;
+        }
+        else{
+          *pte = *pte | PTE_W;
+          if(cow_count[index] == 1){
+            kfree((void*) mem);
+          }
+          else{
+            cow_count[index]--;
+            flags = PTE_FLAGS(*pte);
+            memmove(mem, (char*)pa, PGSIZE);
+            *pte = PA2PTE((uint64) mem) | flags;
+          }
+        }
+//基本思路是对的，首先，在进行页面PTE更换的时候，首先应该unmap函数操作，再map以更新，我一开始采用直接对*PTE赋值，这样不能代替map和unmap的一些异常处理的操作
+//之后，由于我在kfree中，对于释放页面进行了改写，有的情况不释放减少数值，有的时候释放页面，在unmap的时候，就调用kfree了，因此，不应该在这里重复减少数值。
+
+//由于程序是多进程的，因此逻辑会受到并发的影响，举例子，在kalloc之前 ， cow_count[index]为2，但是在kalloc的过程中，有可能共享pa的另一个进程结束，会被kfree释放
+//,cow_count[index]=1,如果此时我们不用uvmunmap，而是直接更换PTE，将cow_count[index]-1=0，此时pa的cow_count[index]为1，说明原页面只有一个进程享用pa，但是此时已经将pa复制给mem，
+//mem和pa只需要一个页面就可以供给一个进程， 因此uvmnmap再次检查，如果有必要将pa释放掉，如果不释放，则会造成pa占用, uvmnmap多了一个将cow_count[index]为1的页面，
+//由于该页面也即将被更换，将pa重新加入freelist中，这样pa被释放，如果不加入freelist，即使pa对应的PTE=0，内存没释放。。。。。。
+
+//uvmunmap使用的思路见copyout, 此时是直接根据情况释放页面，尽可能不释放pa，但是没有锁，如果例子足够刁钻，可能也会有并发问题。
+
+//还有一种思路，就是在整个过程中，上一把锁，直到完成page fault处理，再释放锁，主要是针对cow_count作为全局变量会被改变的情况，相比第二种情况，这种最为安全，第一种
+//也比较安全，但是复制次数更多
+      }
+      
+    }
+
+    
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());

@@ -13,6 +13,7 @@ void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
+int cow_count[32800] = {0};
 
 struct run {
   struct run *next;
@@ -27,6 +28,9 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  for(int i = 0; i < 32800; i++){
+    cow_count[i] = 0;
+  }
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -43,23 +47,31 @@ freerange(void *pa_start, void *pa_end)
 // which normally should have been returned by a
 // call to kalloc().  (The exception is when
 // initializing the allocator; see kinit above.)
+int freee = 0;
 void
 kfree(void *pa)
 {
   struct run *r;
-
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
-    panic("kfree");
-
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
-
-  r = (struct run*)pa;
-
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  int index;
+  index = (PHYSTOP - (uint64) pa)/4096 -1;
+  if(cow_count[index] <= 1){
+    if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+      panic("kfree");
+    // Fill with junk to catch dangling refs.
+    memset(pa, 1, PGSIZE);
+    // cow_count[(PHYSTOP - (uint64)pa)/4096-1] = 0;
+    r = (struct run*)pa;
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    cow_count[index] = 0;
+    release(&kmem.lock);
+  }
+  else if(cow_count[index] > 1){
+    cow_count[index]--;
+    // if(cow_count[index]==1)
+    //   printf("kfree: %d  ", cow_count[index]);
+  }
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -69,14 +81,19 @@ void *
 kalloc(void)
 {
   struct run *r;
+  int index;
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
+    index = (PHYSTOP - (uint64) r)/4096-1;
+    cow_count[index] = 1;
+  }
   release(&kmem.lock);
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+  }
   return (void*)r;
 }
