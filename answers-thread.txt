@@ -1,0 +1,3 @@
+When insert information to hash table, when the two thread insert information to the new table at the same time, when one thread
+run just before updating the table pointer, the other thread interupt, so their are two choice for the pointer to choose, the result insert
+either of the information will be lost.

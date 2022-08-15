@@ -10,10 +10,29 @@
 #define STACK_SIZE  8192
 #define MAX_THREAD  4
 
+struct context {
+  uint64 ra;
+  uint64 sp;
+
+  // callee-saved
+  uint64 s0;
+  uint64 s1;
+  uint64 s2;
+  uint64 s3;
+  uint64 s4;
+  uint64 s5;
+  uint64 s6;
+  uint64 s7;
+  uint64 s8;
+  uint64 s9;
+  uint64 s10;
+  uint64 s11;
+};
 
 struct thread {
   char       stack[STACK_SIZE]; /* the thread's stack */
   int        state;             /* FREE, RUNNING, RUNNABLE */
+  struct context context;
 };
 struct thread all_thread[MAX_THREAD];
 struct thread *current_thread;
@@ -58,14 +77,16 @@ thread_schedule(void)
     next_thread->state = RUNNING;
     t = current_thread;
     current_thread = next_thread;
-    /* YOUR CODE HERE
-     * Invoke thread_switch to switch from t to next_thread:
-     * thread_switch(??, ??);
-     */
+    //  YOUR CODE HERE
+    //  Invoke thread_switch to switch from t to next_thread:
+    thread_switch((uint64) &t->context, (uint64) &next_thread->context);
   } else
     next_thread = 0;
 }
-
+// 相当于初始化函数。初始化线程的函数入口，每个线程使用一个堆栈，初始化堆栈的地址，我一开始没有初始化堆栈的地址
+//导致switch时候，找不到堆栈，由于线程堆栈分配是手动分配的，堆栈的位置也要手动初始化。sp为堆栈位置，s0-s12是通用寄存器。
+//同时，初始指针应该指向栈顶，从高到低，因为栈从高向低，不然会内存错误。
+//如果指向低处，b会把a内存覆盖，导致a不行，c覆盖b，最后只有c可用
 void 
 thread_create(void (*func)())
 {
@@ -75,6 +96,8 @@ thread_create(void (*func)())
     if (t->state == FREE) break;
   }
   t->state = RUNNABLE;
+  t->context.ra = (uint64) func;
+  t->context.sp = (uint64) &t->stack[STACK_SIZE];
   // YOUR CODE HERE
 }
 
