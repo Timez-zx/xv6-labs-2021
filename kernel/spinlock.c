@@ -56,6 +56,7 @@ initlock(struct spinlock *lk, char *name)
 #endif  
 }
 
+
 // Acquire the lock.
 // Loops (spins) until the lock is acquired.
 void

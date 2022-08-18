@@ -26,7 +26,6 @@ int ntas(int print)
 {
   int n;
   char *c;
-
   if (statistics(buf, SZ) <= 0) {
     fprintf(2, "ntas: no stats\n");
   }
