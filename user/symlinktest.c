@@ -44,6 +44,7 @@ cleanup(void)
 static int
 stat_slink(char *pn, struct stat *st)
 {
+  // printf("zx\n");
   int fd = open(pn, O_RDONLY | O_NOFOLLOW);
   if(fd < 0)
     return -1;
@@ -63,7 +64,6 @@ testsymlink(void)
   printf("Start: test symlinks\n");
 
   mkdir("/testsymlink");
-
   fd1 = open("/testsymlink/a", O_CREATE | O_RDWR);
   if(fd1 < 0) fail("failed to open a");
 
@@ -73,19 +73,16 @@ testsymlink(void)
 
   if(write(fd1, buf, sizeof(buf)) != 4)
     fail("failed to write to a");
-
   if (stat_slink("/testsymlink/b", &st) != 0)
     fail("failed to stat b");
   if(st.type != T_SYMLINK)
     fail("b isn't a symlink");
-
   fd2 = open("/testsymlink/b", O_RDWR);
   if(fd2 < 0)
     fail("failed to open b");
   read(fd2, &c, 1);
   if (c != 'a')
     fail("failed to read bytes from b");
-
   unlink("/testsymlink/a");
   if(open("/testsymlink/b", O_RDWR) >= 0)
     fail("Should not be able to open b after deleting a");
@@ -147,7 +144,6 @@ concur(void)
     exit(1);
   }
   close(fd);
-
   for(int j = 0; j < nchild; j++) {
     pid = fork();
     if(pid < 0){
