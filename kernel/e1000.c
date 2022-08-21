@@ -102,9 +102,24 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  
+  acquire(&e1000_lock);
+  uint32 tdt_point = regs[E1000_TDT];
+  if((tx_ring[tdt_point].status & E1000_TXD_STAT_DD) == 0){
+    release(&e1000_lock);
+    return -1;
+  }
+  if(tx_mbufs[tdt_point])
+    mbuffree(tx_mbufs[tdt_point]);
+  tx_ring[tdt_point].addr = (uint64) m->head;
+  tx_ring[tdt_point].length = m->len;
+  tx_mbufs[tdt_point] = m;
+  tx_ring[tdt_point].cmd = tx_ring[tdt_point].cmd | E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  regs[E1000_TDT] = (tdt_point+1)%TX_RING_SIZE;
+  release(&e1000_lock);
   return 0;
 }
+
+
 
 static void
 e1000_recv(void)
@@ -115,7 +130,29 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  uint32 rdt_point = (regs[E1000_RDT]+1)%RX_RING_SIZE;
+  struct mbuf *new;
+  while(rx_ring[rdt_point].status & E1000_RXD_STAT_DD){
+    rx_mbufs[rdt_point]->len = rx_ring[rdt_point].length;
+    net_rx(rx_mbufs[rdt_point]);
+    new = mbufalloc(0);
+    if (!new)
+      panic("e1000");
+    rx_ring[rdt_point].addr = (uint64) new->head;
+    rx_mbufs[rdt_point] = new;
+    rx_ring[rdt_point].status = 0;
+    rdt_point = (rdt_point+1)%RX_RING_SIZE;
+  }
+  if(rdt_point == 0)
+    regs[E1000_RDT] = RX_RING_SIZE-1;
+  else
+    regs[E1000_RDT] = rdt_point - 1;
+
 }
+
+
+
+
 
 void
 e1000_intr(void)
@@ -127,3 +164,15 @@ e1000_intr(void)
 
   e1000_recv();
 }
+
+
+//本次实验难度相对很小，只需要理解每个寄存器的数据干什么用的
+
+//首先，第一次实验卡在single thread，是因为没把申请的new和rx_mbuf绑定在一起，可能因为DMA复制数据的时候
+//分别给ring和mbuf复制，不会通过ring访问mbuf，而是直接复制数据给mbuf，因此如果没有绑定，则到第17个包的时候
+//就会发生新到来的包没有mbuf可以放数据，所以卡死
+
+//而多进程与单进程实验，主要第一区分send要上锁，其次是触发intr的机制是一批临近包出发，单线程的时候，由于包和包直接到达时间
+//相差比较远，因此，每次一个包到都会出发intr，但是多线程包和包到达时间比较近，所有包同一个中断到达，如果recv一个中断只处理一个包，
+//则剩下的包就会等待中断继续处理，但是后续没有包到来就没有中断，上层收不到数据包就会卡死。由于一批包到来触发一个中断，因此recv应该考虑一批包情况
+//因此，需要while处理
