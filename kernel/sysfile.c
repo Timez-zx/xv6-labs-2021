@@ -79,6 +79,88 @@ sys_read(void)
 }
 
 uint64
+sys_mmap(void)
+{
+  int length, prot, flags;
+  struct file *f;
+  struct proc *p = myproc();
+  int mapcount;
+  uint64 sz = p->sz;
+  if((argint(1, &length) < 0) || (argint(2, &prot) < 0) || (argint(3, &flags) < 0) || (argfd(4, 0, &f) < 0))
+    return -1;
+  if(f->readable == 0 && (prot & PROT_READ)){
+    return -1;
+  }
+  if(flags == MAP_SHARED){
+    if(f->writable == 0 && (prot & PROT_WRITE)){
+      return -1;
+    }
+  }
+  for(mapcount = 0; mapcount < 16; mapcount++){
+    if(p->map[mapcount] == 0){
+      p->map[mapcount] = 1;
+      break;
+    }
+  }
+  
+  p->vma_array[mapcount].addr = PGROUNDUP(sz);
+  p->vma_array[mapcount].mfile = f;
+  p->vma_array[mapcount].flags = flags;
+  p->vma_array[mapcount].permission = prot;
+  p->vma_array[mapcount].length = length;
+  p->vma_array[mapcount].left = length;
+  p->sz = p->sz + length;
+  filedup(f);
+
+  return p->vma_array[mapcount].addr;
+}
+
+uint64
+sys_munmap(void)
+{
+  struct proc *p = myproc();
+  int length;
+  uint64 addr;
+  int mapcount;
+  int left_cp = 0;
+  if((argint(1, &length) < 0) || (argaddr(0, &addr) < 0))
+    return -1;
+  for(mapcount = 0; mapcount < 16; mapcount++){
+    if(p->map[mapcount] == 1 && p->vma_array[mapcount].addr <= addr && 
+    addr < p->vma_array[mapcount].addr + p->vma_array[mapcount].length){
+      left_cp = p->vma_array[mapcount].left;
+      if(length == p->vma_array[mapcount].left){
+          p->map[mapcount] = 0;
+          break;
+      }
+      else{
+        p->vma_array[mapcount].left = p->vma_array[mapcount].left - length;
+        break;
+      }
+    }
+    else{
+      if(mapcount == 15){
+        return -1;
+      }
+    }
+  }
+  if(length < left_cp){
+    if(p->vma_array[mapcount].flags == MAP_SHARED){
+      filewrite(p->vma_array[mapcount].mfile, addr, length);
+    }
+    uvmunmap(p->pagetable, addr, length/PGSIZE, 1);
+  }
+  else{
+    if(p->vma_array[mapcount].flags == MAP_SHARED){
+      filewrite(p->vma_array[mapcount].mfile, addr, length);
+    }
+    uvmunmap(p->pagetable, addr, length/PGSIZE, 1);
+    fileddown(p->vma_array[mapcount].mfile);
+  }
+  return 0;
+}
+
+uint64
 sys_write(void)
 {
   struct file *f;

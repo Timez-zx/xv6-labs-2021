@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
@@ -25,6 +26,9 @@ extern char trampoline[]; // trampoline.S
 // memory model when using p->parent.
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
+
+
+
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -47,7 +51,6 @@ void
 procinit(void)
 {
   struct proc *p;
-  
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -119,6 +122,9 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  for(int i=0; i < 16; i++){
+    p->map[i] = 0;
+  }
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -280,7 +286,13 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
-
+  for(int i = 0; i < 16; i++){
+    np->map[i] = p->map[i];
+    np->vma_array[i] = p->vma_array[i];
+    if(np->map[i]){
+      filedup(np->vma_array[i].mfile);
+    }
+  }
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
@@ -300,6 +312,9 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
+
+ 
+
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
@@ -351,6 +366,17 @@ exit(int status)
       fileclose(f);
       p->ofile[fd] = 0;
     }
+  }
+
+  for(int i = 0; i < 16; i++){
+    if(p->map[i]){
+      if(p->vma_array[i].flags == MAP_SHARED){
+        filewrite(p->vma_array[i].mfile, p->vma_array[i].addr, p->vma_array[i].length);
+      }
+      uvmunmap(p->pagetable, p->vma_array[i].addr, p->vma_array[i].length/PGSIZE, 1);
+      fileddown(p->vma_array[i].mfile);
+    }
+    p->map[i] = 0;
   }
 
   begin_op();

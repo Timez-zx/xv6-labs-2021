@@ -28,6 +28,17 @@ struct cpu {
 
 extern struct cpu cpus[NCPU];
 
+struct VMA{
+    uint64 addr;
+    int length;
+    int permission;
+    int flags;
+    struct file *mfile;
+    int left;
+};
+
+
+
 // per-process data for the trap handling code in trampoline.S.
 // sits in a page by itself just under the trampoline page in the
 // user page table. not specially mapped in the kernel page table.
@@ -92,6 +103,8 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
+  struct VMA vma_array[16];
+  int map[16];
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process

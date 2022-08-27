@@ -2308,6 +2308,7 @@ sbrkfail(char *s)
     a = sbrk(0);
     sbrk(10*BIG);
     int n = 0;
+
     for (i = 0; i < 10*BIG; i += PGSIZE) {
       n += *(a+i);
     }

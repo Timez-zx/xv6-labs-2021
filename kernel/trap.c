@@ -6,6 +6,43 @@
 #include "proc.h"
 #include "defs.h"
 
+struct file {
+  enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
+  int ref; // reference count
+  char readable;
+  char writable;
+  struct pipe *pipe; // FD_PIPE
+  struct inode *ip;  // FD_INODE and FD_DEVICE
+  uint off;          // FD_INODE
+  short major;       // FD_DEVICE
+};
+
+struct sleeplock {
+  uint locked;       // Is the lock held?
+  struct spinlock lk; // spinlock protecting this sleep lock
+  
+  // For debugging:
+  char *name;        // Name of lock.
+  int pid;           // Process holding lock
+};
+
+struct inode {
+  uint dev;           // Device number
+  uint inum;          // Inode number
+  int ref;            // Reference count
+  struct sleeplock lock; // protects everything below here
+  int valid;          // inode has been read from disk?
+
+  short type;         // copy of disk inode
+  short major;
+  short minor;
+  short nlink;
+  uint size;
+  uint addrs[12+1];
+};
+
+struct inode;
+
 struct spinlock tickslock;
 uint ticks;
 
@@ -67,6 +104,52 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+
+  } else if(r_scause() == 13 || r_scause() == 15){
+    uint64 addr = r_stval();
+    struct VMA vma = {0};
+    uint64 a;
+    char *mem;
+    if(addr < MAXVA && addr < KERNBASE){
+      for(int i = 0; i < 16; i++){
+        if(addr >= p->vma_array[i].addr && addr < p->vma_array[i].addr+p->vma_array[i].length && p->map[i]){
+          vma = p->vma_array[i];
+          break;
+        }
+        else{
+          if(i == 15){
+            p->killed = 1;
+          }
+        }
+      }
+      if(p->killed != 1){
+        for(a = addr; a < vma.addr+vma.length; a += PGSIZE){
+          if(walkaddr(p->pagetable, a)){
+            uvmunmap(p->pagetable, a, 1, 1);
+          }
+          mem = kalloc();
+          if(mem == 0){
+            p->killed = 1; 
+            break;   
+          }
+          else{
+            memset(mem, 0, PGSIZE);
+            acquiresleep(&vma.mfile->ip->lock);
+            readi(vma.mfile->ip, 0, (uint64) mem, a-addr, PGSIZE);
+            releasesleep(&vma.mfile->ip->lock);
+            int flag = vma.permission << 1;
+            if(mappages(p->pagetable, PGROUNDDOWN(a), PGSIZE, (uint64)mem, PTE_X|PTE_U| flag) != 0){
+              kfree(mem);
+              p->killed = 1;
+              break;
+            }   
+          }
+        }
+      }
+    }
+    else{
+      p->killed = 1;
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
